@@ -111,8 +111,19 @@ echo "Generating secrets..."
 UUID=$(${DOCKER_BIN} run --rm teddysun/xray:latest xray uuid)
 
 KEYS_OUTPUT=$(${DOCKER_BIN} run --rm teddysun/xray:latest xray x25519)
-PRIVATE_KEY=$(echo "$KEYS_OUTPUT" | grep -E "Private key:|PrivateKey:" | head -n 1 | awk '{print $3}')
-PUBLIC_KEY=$(echo "$KEYS_OUTPUT" | grep -E "Public key:|PublicKey:" | head -n 1 | awk '{print $3}')
+extract_key_from_output() {
+    # Extract text after ":" (tolerant to spacing / extra columns)
+    # Examples seen:
+    #   Private key: <key>
+    #   PrivateKey: <key>
+    #   Public key: <key>
+    #   PublicKey: <key>
+    local pattern="$1"
+    echo "$KEYS_OUTPUT" | grep -E "${pattern}" | head -n 1 | sed -E 's/^.*:[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+PRIVATE_KEY=$(extract_key_from_output "Private key:|PrivateKey:")
+PUBLIC_KEY=$(extract_key_from_output "Public key:|PublicKey:")
 
 if [ -z "${PRIVATE_KEY}" ] || [ -z "${PUBLIC_KEY}" ]; then
     echo "Error: failed to parse x25519 keys from xray output." >&2
