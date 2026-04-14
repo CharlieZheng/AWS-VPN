@@ -125,7 +125,7 @@ extract_key_from_output() {
 }
 
 PRIVATE_KEY=$(extract_key_from_output "Private key:|PrivateKey:")
-PUBLIC_KEY=$(extract_key_from_output "Public key:|PublicKey:")
+PUBLIC_KEY=$(extract_key_from_output "Public key:|PublicKey:|Password \\(PublicKey\\):")
 
 # Some xray builds may print keys on next line after label.
 if [ -z "${PRIVATE_KEY}" ]; then
@@ -138,7 +138,7 @@ fi
 if [ -z "${PUBLIC_KEY}" ]; then
     PUBLIC_KEY=$(echo "$KEYS_OUTPUT" | awk '
         BEGIN{capture=0}
-        /Public key:|PublicKey:/{capture=1; next}
+        /Public key:|PublicKey:|Password \(PublicKey\):/{capture=1; next}
         capture==1 && NF>0 {gsub(/^[ \t]+|[ \t]+$/, "", $0); print; exit}
     ' || true)
 fi
