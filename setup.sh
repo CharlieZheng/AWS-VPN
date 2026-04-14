@@ -339,8 +339,7 @@ http {
     access_log off;
 
     server {
-        listen 127.0.0.1:__NGINX_HTTPS_PORT__ ssl;
-        http2 on;
+        listen 127.0.0.1:__NGINX_HTTPS_PORT__ ssl http2;
         server_name __DOMAIN__ *.__DOMAIN__;
 
         ssl_certificate /etc/nginx/ssl/cert.pem;
@@ -372,8 +371,7 @@ http {
     # Example: sudoku.illrq.vip
     #
     # server {
-    #     listen 127.0.0.1:__NGINX_HTTPS_PORT__ ssl;
-    #     http2 on;
+    #     listen 127.0.0.1:__NGINX_HTTPS_PORT__ ssl http2;
     #     server_name sudoku.__DOMAIN__;
     #     ssl_certificate /etc/nginx/ssl/cert.pem;
     #     ssl_certificate_key /etc/nginx/ssl/key.pem;
