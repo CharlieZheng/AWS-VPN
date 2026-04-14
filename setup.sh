@@ -112,18 +112,36 @@ UUID=$(${DOCKER_BIN} run --rm teddysun/xray:latest xray uuid)
 
 KEYS_OUTPUT=$(${DOCKER_BIN} run --rm teddysun/xray:latest xray x25519)
 extract_key_from_output() {
-    # Extract text after ":" (tolerant to spacing / extra columns)
-    # Examples seen:
-    #   Private key: <key>
-    #   PrivateKey: <key>
-    #   Public key: <key>
-    #   PublicKey: <key>
+    # Be tolerant to formatting differences across xray versions and
+    # avoid exiting on no-match under `set -euo pipefail`.
     local pattern="$1"
-    echo "$KEYS_OUTPUT" | grep -E "${pattern}" | head -n 1 | sed -E 's/^.*:[[:space:]]*//; s/[[:space:]]*$//'
+    local line
+    line=$(echo "$KEYS_OUTPUT" | grep -E "${pattern}" | head -n 1 || true)
+    if [ -n "${line}" ]; then
+        echo "${line}" | sed -E 's/^.*:[[:space:]]*//; s/[[:space:]]*$//'
+        return 0
+    fi
+    echo ""
 }
 
 PRIVATE_KEY=$(extract_key_from_output "Private key:|PrivateKey:")
 PUBLIC_KEY=$(extract_key_from_output "Public key:|PublicKey:")
+
+# Some xray builds may print keys on next line after label.
+if [ -z "${PRIVATE_KEY}" ]; then
+    PRIVATE_KEY=$(echo "$KEYS_OUTPUT" | awk '
+        BEGIN{capture=0}
+        /Private key:|PrivateKey:/{capture=1; next}
+        capture==1 && NF>0 {gsub(/^[ \t]+|[ \t]+$/, "", $0); print; exit}
+    ' || true)
+fi
+if [ -z "${PUBLIC_KEY}" ]; then
+    PUBLIC_KEY=$(echo "$KEYS_OUTPUT" | awk '
+        BEGIN{capture=0}
+        /Public key:|PublicKey:/{capture=1; next}
+        capture==1 && NF>0 {gsub(/^[ \t]+|[ \t]+$/, "", $0); print; exit}
+    ' || true)
+fi
 
 if [ -z "${PRIVATE_KEY}" ] || [ -z "${PUBLIC_KEY}" ]; then
     echo "Error: failed to parse x25519 keys from xray output." >&2
