@@ -111,8 +111,15 @@ echo "Generating secrets..."
 UUID=$(${DOCKER_BIN} run --rm teddysun/xray:latest xray uuid)
 
 KEYS_OUTPUT=$(${DOCKER_BIN} run --rm teddysun/xray:latest xray x25519)
-PRIVATE_KEY=$(echo "$KEYS_OUTPUT" | grep "Private key:" | awk '{print $3}')
-PUBLIC_KEY=$(echo "$KEYS_OUTPUT" | grep "Public key:" | awk '{print $3}')
+PRIVATE_KEY=$(echo "$KEYS_OUTPUT" | grep -E "Private key:|PrivateKey:" | head -n 1 | awk '{print $3}')
+PUBLIC_KEY=$(echo "$KEYS_OUTPUT" | grep -E "Public key:|PublicKey:" | head -n 1 | awk '{print $3}')
+
+if [ -z "${PRIVATE_KEY}" ] || [ -z "${PUBLIC_KEY}" ]; then
+    echo "Error: failed to parse x25519 keys from xray output." >&2
+    echo "Raw output:" >&2
+    echo "${KEYS_OUTPUT}" >&2
+    exit 1
+fi
 
 SHORT_ID=$(openssl rand -hex 8)
 WS_PATH="/$(openssl rand -hex 8)"
