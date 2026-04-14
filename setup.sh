@@ -276,7 +276,7 @@ XRAY_EOF
 echo "Generating Nginx configuration..."
 
 cat > "${SCRIPT_DIR}/nginx/nginx.conf" << 'NGINX_EOF'
-load_module /etc/nginx/modules/ngx_stream_module.so;
+load_module /usr/lib/nginx/modules/ngx_stream_module.so;
 
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
@@ -373,6 +373,16 @@ sed -i "s|__XRAY_REALITY_PORT__|${XRAY_REALITY_PORT}|g" "${SCRIPT_DIR}/nginx/ngi
 sed -i "s|__XRAY_WS_PORT__|${XRAY_WS_PORT}|g" "${SCRIPT_DIR}/nginx/nginx.conf"
 sed -i "s|__NGINX_HTTPS_PORT__|${NGINX_HTTPS_PORT}|g" "${SCRIPT_DIR}/nginx/nginx.conf"
 
+# Validate nginx config before compose up
+echo "Validating Nginx configuration..."
+${DOCKER_BIN} run --rm \
+    --network host \
+    -v "${SCRIPT_DIR}/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+    -v "${SCRIPT_DIR}/xray/cert.pem:/etc/nginx/ssl/cert.pem:ro" \
+    -v "${SCRIPT_DIR}/xray/key.pem:/etc/nginx/ssl/key.pem:ro" \
+    -v "${SCRIPT_DIR}/www:/var/www:ro" \
+    nginx:alpine nginx -t
+
 # ----------------------------------------------
 # 6. Create default website (if not exists)
 # ----------------------------------------------
@@ -464,5 +474,15 @@ else
     echo "Error: Some containers failed to start."
     [ -z "$XRAY_OK" ] && echo "  Xray:  FAILED (check: docker logs xray)"
     [ -z "$NGINX_OK" ] && echo "  Nginx: FAILED (check: docker logs nginx)"
+    if [ -z "$XRAY_OK" ]; then
+        echo ""
+        echo "===== xray logs (last 80 lines) ====="
+        ${DOCKER_BIN} logs --tail 80 xray || true
+    fi
+    if [ -z "$NGINX_OK" ]; then
+        echo ""
+        echo "===== nginx logs (last 80 lines) ====="
+        ${DOCKER_BIN} logs --tail 80 nginx || true
+    fi
     exit 1
 fi
