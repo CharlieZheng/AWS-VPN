@@ -11,10 +11,10 @@ fi
 source "${SCRIPT_DIR}/.env"
 
 # VLESS Reality share link (direct connection)
-REALITY_LINK="vless://${UUID}@${SERVER_IP}:${REALITY_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SERVER_NAMES}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#Reality-Direct"
+REALITY_LINK="vless://${UUID}@${SERVER_IP}:${PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${REALITY_SERVER_NAMES}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#Reality-Direct"
 
 # VLESS WS+TLS+CDN share link (via Cloudflare)
-CDN_LINK="vless://${UUID}@${DOMAIN}:${CDN_PORT}?encryption=none&security=tls&sni=${DOMAIN}&fp=chrome&type=ws&host=${DOMAIN}&path=$(echo "${WS_PATH}" | sed 's|/|%2F|g')&allowInsecure=1#WS-CDN-Backup"
+CDN_LINK="vless://${UUID}@${DOMAIN}:${PORT}?encryption=none&security=tls&sni=${DOMAIN}&fp=chrome&type=ws&host=${DOMAIN}&path=$(echo "${WS_PATH}" | sed 's|/|%2F|g')&allowInsecure=1#WS-CDN-Backup"
 
 echo ""
 echo "============================================"
@@ -23,7 +23,7 @@ echo "============================================"
 echo ""
 echo "Protocol:    VLESS"
 echo "Address:     ${SERVER_IP}"
-echo "Port:        ${REALITY_PORT}"
+echo "Port:        ${PORT}"
 echo "UUID:        ${UUID}"
 echo "Flow:        xtls-rprx-vision"
 echo "Network:     tcp"
@@ -43,7 +43,7 @@ echo "============================================"
 echo ""
 echo "Protocol:    VLESS"
 echo "Address:     ${DOMAIN}"
-echo "Port:        ${CDN_PORT}"
+echo "Port:        ${PORT}"
 echo "UUID:        ${UUID}"
 echo "Network:     ws"
 echo "Security:    tls"
@@ -64,7 +64,7 @@ proxies:
   - name: Reality-Direct
     type: vless
     server: ${SERVER_IP}
-    port: ${REALITY_PORT}
+    port: ${PORT}
     uuid: ${UUID}
     network: tcp
     tls: true
@@ -79,7 +79,7 @@ proxies:
   - name: WS-CDN-Backup
     type: vless
     server: ${DOMAIN}
-    port: ${CDN_PORT}
+    port: ${PORT}
     uuid: ${UUID}
     network: ws
     tls: true

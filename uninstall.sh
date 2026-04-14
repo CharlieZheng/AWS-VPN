@@ -3,15 +3,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "Stopping Xray..."
+echo "Stopping services..."
 
 if docker compose version >/dev/null 2>&1; then
     COMPOSE_CMD="docker compose"
 elif command -v docker-compose >/dev/null 2>&1; then
     COMPOSE_CMD="docker-compose"
 else
-    docker stop xray 2>/dev/null || true
-    docker rm xray 2>/dev/null || true
+    docker stop xray nginx 2>/dev/null || true
+    docker rm xray nginx 2>/dev/null || true
     COMPOSE_CMD=""
 fi
 
@@ -22,8 +22,10 @@ fi
 
 echo "Removing generated files..."
 rm -rf "${SCRIPT_DIR}/xray"
+rm -rf "${SCRIPT_DIR}/nginx"
 rm -f "${SCRIPT_DIR}/.env"
 
 echo ""
 echo "Uninstall complete."
-echo "Docker image retained. To remove: docker rmi teddysun/xray"
+echo "Docker images retained. To remove:"
+echo "  docker rmi teddysun/xray nginx:alpine"

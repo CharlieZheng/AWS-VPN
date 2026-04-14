@@ -10,3 +10,16 @@ services:
       - ./xray:/etc/xray:ro
     environment:
       - TZ=UTC
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: always
+    network_mode: host
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./xray/cert.pem:/etc/nginx/ssl/cert.pem:ro
+      - ./xray/key.pem:/etc/nginx/ssl/key.pem:ro
+      - ./www:/var/www:ro
+    depends_on:
+      - xray

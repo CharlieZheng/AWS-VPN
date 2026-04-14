@@ -2,8 +2,8 @@
 
 Xray VLESS 双协议代理，Docker 一键部署。
 
-- **主力**：VLESS + Reality（端口 443，直连，速度快）
-- **备用**：VLESS + WS + TLS + Cloudflare CDN（端口 8443，IP 被封也能用）
+- **主力**：VLESS + Reality（外网端口 443，直连，速度快）
+- **备用**：VLESS + WS + TLS + Cloudflare CDN（外网端口同为 443，SNI 分流，IP 被封也能用）
 
 ## 快速开始
 
@@ -25,8 +25,7 @@ sudo bash bbr.sh
 
 放行入站规则：
 - TCP 22（SSH）
-- TCP 443（Reality）
-- TCP 8443（WS+TLS+CDN）
+- TCP 443（所有流量统一走 443：Reality / Web / WS 都通过 Nginx SNI 分流）
 
 ### Cloudflare 设置（WS+CDN 备用线路必需）
 
@@ -95,7 +94,7 @@ docker ps | grep xray
 - 确认 Cloudflare DNS 已开启代理（橙色云朵）
 - 确认 SSL 模式为 "Full"（不是 "Flexible" 也不是 "Full Strict"）
 - 确认 Cloudflare 网络设置中 WebSockets 已开启
-- 检查 AWS 安全组是否放行了 TCP 8443
+- 检查 AWS 安全组是否放行了 TCP 443
 
 **服务器 IP 被封：**
 - 客户端切换到 WS-CDN-Backup 链接即可

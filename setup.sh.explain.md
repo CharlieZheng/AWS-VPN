@@ -32,17 +32,23 @@ set -euo pipefail
 
 ```bash
 DOMAIN="illrq.vip"
-REALITY_PORT=443
-CDN_PORT=8443
+LISTEN_PORT=443
 REALITY_DEST="www.microsoft.com:443"
 REALITY_SERVER_NAMES="www.microsoft.com"
+
+# Internal ports (localhost only, not exposed to internet)
+XRAY_REALITY_PORT=10443
+XRAY_WS_PORT=10000
+NGINX_HTTPS_PORT=10080
 ```
 
-- `DOMAIN` — 你的域名，用于 WS+TLS+CDN 备用线路和自签名证书。
-- `REALITY_PORT=443` — Reality 监听端口。用 443 是因为这是标准 HTTPS 端口，流量最不显眼。
-- `CDN_PORT=8443` — WS+TLS 监听端口。8443 是 Cloudflare 支持的 HTTPS 端口之一，不与 443 的 Reality 冲突。
+- `DOMAIN` — 你的域名，用于 WS+TLS+CDN 备用线路（通过 Cloudflare）和自签名证书。
+- `LISTEN_PORT=443` — **对外唯一端口**。所有流量统一走 443，由 Nginx 根据 SNI 分流到不同后端。
 - `REALITY_DEST` — Reality 伪装目标。当 GFW 主动探测你的服务器时，Reality 会将探测请求转发到 microsoft.com，让探测者看到的是一个正常的微软网站。
 - `REALITY_SERVER_NAMES` — TLS 握手时允许的 SNI（Server Name Indication）。客户端连接时会带上这个域名，Xray 据此判断是否为合法客户端。
+- `XRAY_REALITY_PORT` — Xray Reality 入站监听在本机回环地址（127.0.0.1）的端口（仅供 Nginx 转发）。
+- `XRAY_WS_PORT` — Xray WS 入站监听在本机回环地址（127.0.0.1）的端口（TLS 由 Nginx 终止）。
+- `NGINX_HTTPS_PORT` — Nginx 的本机 HTTPS 站点端口（仅本机监听），用于承载网站与 WS 反代入口。
 
 ---
 
@@ -127,18 +133,16 @@ fi
 ## 第 46-52 行：检查端口占用
 
 ```bash
-for PORT in ${REALITY_PORT} ${CDN_PORT}; do
-    if ss -tlnp | grep -q ":${PORT} "; then
-        echo "Error: Port ${PORT} is already in use."
-        ss -tlnp | grep ":${PORT} "
-        exit 1
-    fi
-done
+if ss -tlnp | grep -q ":${LISTEN_PORT} "; then
+    echo "Error: Port ${LISTEN_PORT} is already in use."
+    ss -tlnp | grep ":${LISTEN_PORT} "
+    exit 1
+fi
 ```
 
 - `ss -tlnp` — 列出所有 TCP 监听端口（`-t` TCP，`-l` 监听，`-n` 数字格式，`-p` 显示进程）。
 - `grep -q ":443 "` — 静默检查 443 端口是否被占用。
-- 如果 443 或 8443 已被其他服务占用（如 Nginx、Apache），提前报错，避免 Xray 启动失败。
+- 如果 443 已被其他服务占用（如已有 Nginx、Apache），提前报错，避免容器启动失败。
 
 ---
 
@@ -308,14 +312,14 @@ XRAY_EOF
 - `"shortIds"` — 额外认证 ID 列表。
 - `"sniffing"` — 流量嗅探，从 TLS SNI / HTTP Host 中检测真实目标地址，用于正确路由和 DNS 解析。
 
-### inbounds[1]：WS+TLS 入站（第 155-192 行）
+### inbounds[1]：WS 入站（第 155-192 行）
 
-- `"tag": "ws-tls-in"` — 标识名。
-- `"port": 8443` — 监听 8443 端口。
+- `"tag": "ws-in"` — 标识名。
+- `"listen": "127.0.0.1"` — 只监听本机回环，不对外暴露。
+- `"port": 10000` — 本机 WS 入站端口（示例，实际由 `XRAY_WS_PORT` 决定）。
 - `"flow": ""` — WS 传输不支持 flow，必须留空。
 - `"network": "ws"` — 传输层使用 WebSocket。
-- `"security": "tls"` — 使用标准 TLS（不是 Reality）。
-- `"certificateFile"` / `"keyFile"` — 指向容器内的证书路径（通过 Docker 挂载）。
+- `"security": "none"` — TLS 由 Nginx 终止，Xray 侧不再配置 TLS。
 - `"path": "${WS_PATH}"` — WebSocket 握手路径，只有匹配的请求才会被处理。
 
 ### outbounds（第 194-203 行）
@@ -354,8 +358,7 @@ chmod 600 "${SCRIPT_DIR}/.env"
 ```bash
 if check_command ufw; then
     ufw allow 22/tcp >/dev/null 2>&1
-    ufw allow ${REALITY_PORT}/tcp >/dev/null 2>&1
-    ufw allow ${CDN_PORT}/tcp >/dev/null 2>&1
+    ufw allow ${LISTEN_PORT}/tcp >/dev/null 2>&1
     ufw --force enable >/dev/null 2>&1
 elif check_command firewall-cmd; then
     firewall-cmd --permanent --add-port=22/tcp >/dev/null 2>&1
@@ -364,7 +367,7 @@ fi
 ```
 
 - 检测系统使用的防火墙工具（Ubuntu 用 ufw，CentOS/RHEL 用 firewalld）。
-- 放行 SSH（22）、Reality（443）、WS+TLS（8443）三个端口。
+- 放行 SSH（22）和 443（所有对外流量统一走 443）。
 - `ufw --force enable` — 强制启用 ufw，跳过交互确认。
 - `firewall-cmd --permanent` — 永久生效（重启不丢失）。
 - AWS 本身有安全组（Security Group），相当于云端防火墙。这里配置的是系统级防火墙，双重保障。
