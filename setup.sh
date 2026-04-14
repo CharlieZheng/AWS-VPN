@@ -104,7 +104,7 @@ mkdir -p "${SCRIPT_DIR}/www/html"
 # ----------------------------------------------
 echo "Pulling Docker images..."
 ${DOCKER_BIN} pull teddysun/xray:latest
-${DOCKER_BIN} pull nginx:alpine
+${DOCKER_BIN} pull nginx:stable
 
 echo "Generating secrets..."
 
@@ -275,8 +275,28 @@ XRAY_EOF
 # ----------------------------------------------
 echo "Generating Nginx configuration..."
 
+# Detect stream module path for current nginx image
+NGINX_IMAGE="nginx:stable"
+STREAM_MODULE_PATH=$(${DOCKER_BIN} run --rm "${NGINX_IMAGE}" sh -c '
+if [ -f /usr/lib/nginx/modules/ngx_stream_module.so ]; then
+  echo /usr/lib/nginx/modules/ngx_stream_module.so
+elif [ -f /etc/nginx/modules/ngx_stream_module.so ]; then
+  echo /etc/nginx/modules/ngx_stream_module.so
+else
+  echo ""
+fi
+')
+
+if [ -n "${STREAM_MODULE_PATH}" ]; then
+    STREAM_LOAD_DIRECTIVE="load_module ${STREAM_MODULE_PATH};"
+else
+    echo "Error: ngx_stream_module.so not found in ${NGINX_IMAGE}." >&2
+    echo "This image cannot provide stream(SNI) routing required by this project." >&2
+    exit 1
+fi
+
 cat > "${SCRIPT_DIR}/nginx/nginx.conf" << 'NGINX_EOF'
-load_module /usr/lib/nginx/modules/ngx_stream_module.so;
+__STREAM_LOAD_DIRECTIVE__
 
 worker_processes auto;
 error_log /var/log/nginx/error.log warn;
@@ -372,6 +392,7 @@ sed -i "s|__LISTEN_PORT__|${LISTEN_PORT}|g" "${SCRIPT_DIR}/nginx/nginx.conf"
 sed -i "s|__XRAY_REALITY_PORT__|${XRAY_REALITY_PORT}|g" "${SCRIPT_DIR}/nginx/nginx.conf"
 sed -i "s|__XRAY_WS_PORT__|${XRAY_WS_PORT}|g" "${SCRIPT_DIR}/nginx/nginx.conf"
 sed -i "s|__NGINX_HTTPS_PORT__|${NGINX_HTTPS_PORT}|g" "${SCRIPT_DIR}/nginx/nginx.conf"
+sed -i "s|__STREAM_LOAD_DIRECTIVE__|${STREAM_LOAD_DIRECTIVE}|g" "${SCRIPT_DIR}/nginx/nginx.conf"
 
 # Validate nginx config before compose up
 echo "Validating Nginx configuration..."
@@ -381,7 +402,7 @@ ${DOCKER_BIN} run --rm \
     -v "${SCRIPT_DIR}/xray/cert.pem:/etc/nginx/ssl/cert.pem:ro" \
     -v "${SCRIPT_DIR}/xray/key.pem:/etc/nginx/ssl/key.pem:ro" \
     -v "${SCRIPT_DIR}/www:/var/www:ro" \
-    nginx:alpine nginx -t
+    "${NGINX_IMAGE}" nginx -t
 
 # ----------------------------------------------
 # 6. Create default website (if not exists)

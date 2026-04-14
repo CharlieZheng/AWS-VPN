@@ -12,7 +12,7 @@ services:
       - TZ=UTC
 
   nginx:
-    image: nginx:alpine
+    image: nginx:stable
     container_name: nginx
     restart: always
     network_mode: host
