@@ -6,6 +6,22 @@ set -euo pipefail
 #  Nginx SNI routing + Xray dual inbound
 # ==============================================
 
+on_error() {
+    local exit_code=$?
+    echo "" >&2
+    echo "Error: setup failed (exit=${exit_code})." >&2
+    echo "  line: ${BASH_LINENO[0]}" >&2
+    echo "  cmd:  ${BASH_COMMAND}" >&2
+    echo "" >&2
+    echo "Hint: run with 'DEBUG=1 bash setup.sh' (or add sudo if needed) to show full command trace." >&2
+    exit "${exit_code}"
+}
+trap on_error ERR
+
+if [ "${DEBUG:-0}" = "1" ]; then
+    set -x
+fi
+
 DOMAIN="illrq.vip"
 LISTEN_PORT=443
 REALITY_DEST="www.microsoft.com:443"
@@ -25,9 +41,14 @@ check_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
-if [ "$(id -u)" -ne 0 ]; then
-    echo "Error: Please run as root (sudo bash setup.sh)"
-    exit 1
+IS_ROOT=0
+if [ "$(id -u)" -eq 0 ]; then
+    IS_ROOT=1
+fi
+
+SUDO=""
+if [ "${IS_ROOT}" -ne 1 ] && check_command sudo; then
+    SUDO="sudo"
 fi
 
 if ! check_command docker; then
@@ -36,10 +57,30 @@ if ! check_command docker; then
     exit 1
 fi
 
-if docker compose version >/dev/null 2>&1; then
-    COMPOSE_CMD="docker compose"
+DOCKER_BIN="docker"
+if [ "${IS_ROOT}" -ne 1 ]; then
+    if docker version >/dev/null 2>&1; then
+        DOCKER_BIN="docker"
+    elif [ -n "${SUDO}" ] && ${SUDO} docker version >/dev/null 2>&1; then
+        DOCKER_BIN="${SUDO} docker"
+        echo "Info: docker requires sudo on this host; using '${DOCKER_BIN}'." >&2
+    else
+        echo "Error: cannot access Docker daemon." >&2
+        echo "  If you see 'permission denied ... /var/run/docker.sock', run:" >&2
+        echo "    sudo bash setup.sh" >&2
+        echo "  Or add your user to the 'docker' group, re-login, then rerun." >&2
+        exit 1
+    fi
+fi
+
+if ${DOCKER_BIN} compose version >/dev/null 2>&1; then
+    COMPOSE_CMD="${DOCKER_BIN} compose"
 elif check_command docker-compose; then
-    COMPOSE_CMD="docker-compose"
+    if [ "${DOCKER_BIN}" = "docker" ]; then
+        COMPOSE_CMD="docker-compose"
+    else
+        COMPOSE_CMD="${SUDO} docker-compose"
+    fi
 else
     echo "Docker Compose not found."
     exit 1
@@ -62,14 +103,14 @@ mkdir -p "${SCRIPT_DIR}/www/html"
 # 2. Pull images and generate secrets
 # ----------------------------------------------
 echo "Pulling Docker images..."
-docker pull teddysun/xray:latest
-docker pull nginx:alpine
+${DOCKER_BIN} pull teddysun/xray:latest
+${DOCKER_BIN} pull nginx:alpine
 
 echo "Generating secrets..."
 
-UUID=$(docker run --rm teddysun/xray:latest xray uuid)
+UUID=$(${DOCKER_BIN} run --rm teddysun/xray:latest xray uuid)
 
-KEYS_OUTPUT=$(docker run --rm teddysun/xray:latest xray x25519)
+KEYS_OUTPUT=$(${DOCKER_BIN} run --rm teddysun/xray:latest xray x25519)
 PRIVATE_KEY=$(echo "$KEYS_OUTPUT" | grep "Private key:" | awk '{print $3}')
 PUBLIC_KEY=$(echo "$KEYS_OUTPUT" | grep "Public key:" | awk '{print $3}')
 
@@ -338,14 +379,30 @@ chmod 600 "${SCRIPT_DIR}/.env"
 # ----------------------------------------------
 if check_command ufw; then
     echo "Configuring firewall..."
-    ufw allow 22/tcp >/dev/null 2>&1
-    ufw allow ${LISTEN_PORT}/tcp >/dev/null 2>&1
-    ufw --force enable >/dev/null 2>&1
+    if [ "${IS_ROOT}" -eq 1 ]; then
+        ufw allow 22/tcp >/dev/null 2>&1
+        ufw allow ${LISTEN_PORT}/tcp >/dev/null 2>&1
+        ufw --force enable >/dev/null 2>&1
+    elif [ -n "${SUDO}" ]; then
+        ${SUDO} ufw allow 22/tcp >/dev/null 2>&1
+        ${SUDO} ufw allow ${LISTEN_PORT}/tcp >/dev/null 2>&1
+        ${SUDO} ufw --force enable >/dev/null 2>&1
+    else
+        echo "Warning: ufw detected but no permission to modify firewall; skipping." >&2
+    fi
 elif check_command firewall-cmd; then
     echo "Configuring firewall..."
-    firewall-cmd --permanent --add-port=22/tcp >/dev/null 2>&1
-    firewall-cmd --permanent --add-port=${LISTEN_PORT}/tcp >/dev/null 2>&1
-    firewall-cmd --reload >/dev/null 2>&1
+    if [ "${IS_ROOT}" -eq 1 ]; then
+        firewall-cmd --permanent --add-port=22/tcp >/dev/null 2>&1
+        firewall-cmd --permanent --add-port=${LISTEN_PORT}/tcp >/dev/null 2>&1
+        firewall-cmd --reload >/dev/null 2>&1
+    elif [ -n "${SUDO}" ]; then
+        ${SUDO} firewall-cmd --permanent --add-port=22/tcp >/dev/null 2>&1
+        ${SUDO} firewall-cmd --permanent --add-port=${LISTEN_PORT}/tcp >/dev/null 2>&1
+        ${SUDO} firewall-cmd --reload >/dev/null 2>&1
+    else
+        echo "Warning: firewalld detected but no permission to modify firewall; skipping." >&2
+    fi
 fi
 
 # ----------------------------------------------
@@ -356,8 +413,8 @@ cd "${SCRIPT_DIR}"
 ${COMPOSE_CMD} up -d
 
 sleep 3
-XRAY_OK=$(docker ps --filter name=xray --filter status=running -q)
-NGINX_OK=$(docker ps --filter name=nginx --filter status=running -q)
+XRAY_OK=$(${DOCKER_BIN} ps --filter name=xray --filter status=running -q)
+NGINX_OK=$(${DOCKER_BIN} ps --filter name=nginx --filter status=running -q)
 
 if [ -n "$XRAY_OK" ] && [ -n "$NGINX_OK" ]; then
     echo ""
