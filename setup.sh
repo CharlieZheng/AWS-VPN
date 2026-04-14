@@ -104,7 +104,10 @@ mkdir -p "${SCRIPT_DIR}/www/html"
 # ----------------------------------------------
 echo "Pulling Docker images..."
 ${DOCKER_BIN} pull teddysun/xray:latest
-${DOCKER_BIN} pull nginx:stable
+
+echo "Building Nginx image with stream module..."
+NGINX_IMAGE="awsvpn-nginx:stream"
+${DOCKER_BIN} build -t "${NGINX_IMAGE}" -f "${SCRIPT_DIR}/docker/nginx-stream/Dockerfile" "${SCRIPT_DIR}"
 
 echo "Generating secrets..."
 
@@ -276,7 +279,6 @@ XRAY_EOF
 echo "Generating Nginx configuration..."
 
 # Detect stream module path for current nginx image
-NGINX_IMAGE="nginx:stable"
 STREAM_MODULE_PATH=$(${DOCKER_BIN} run --rm "${NGINX_IMAGE}" sh -c '
 if [ -f /usr/lib/nginx/modules/ngx_stream_module.so ]; then
   echo /usr/lib/nginx/modules/ngx_stream_module.so

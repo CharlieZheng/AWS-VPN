@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   xray:
     image: teddysun/xray:latest
@@ -12,7 +10,10 @@ services:
       - TZ=UTC
 
   nginx:
-    image: nginx:stable
+    image: awsvpn-nginx:stream
+    build:
+      context: .
+      dockerfile: docker/nginx-stream/Dockerfile
     container_name: nginx
     restart: always
     network_mode: host
