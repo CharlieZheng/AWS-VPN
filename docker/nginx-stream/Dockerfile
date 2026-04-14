@@ -1,8 +1,6 @@
-FROM debian:bookworm-slim
+FROM alpine:3.21
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends nginx libnginx-mod-stream ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache nginx nginx-mod-stream ca-certificates
 
 STOPSIGNAL SIGQUIT
 CMD ["nginx", "-g", "daemon off;"]
