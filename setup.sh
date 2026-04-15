@@ -263,7 +263,10 @@ cat > "${SCRIPT_DIR}/xray/config.json" << XRAY_EOF
     "outbounds": [
         {
             "protocol": "freedom",
-            "tag": "direct"
+            "tag": "direct",
+            "settings": {
+                "domainStrategy": "UseIPv4"
+            }
         },
         {
             "protocol": "blackhole",
